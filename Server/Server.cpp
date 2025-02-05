@@ -72,6 +72,7 @@ void Server::readSocket() {
 	// std::cout << "protocol: " << httpVersion << "\n" << message << requestPath << std::endl;
 	}
 	//                       harcoded                       hardcoded    hardcoded hardcoded
+	std::cout << buffer << std::endl;
 	message = httpVersion + " 200 OK\n" + "Content-Type: text/html\n" + "Content-Length: 9241\n\n" + message;
 }
 

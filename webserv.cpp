@@ -5,12 +5,14 @@ int main() {
 		Server server;
 		server.bindSocket();
 		server.listenSocket();
-		server.acceptConnection();
-		server.readSocket();
-		std::cout << "Received: " << server.getBuffer() << std::endl;
+		while (true) {
+			server.acceptConnection();
+			server.readSocket();
+			server.writeSocket();
+			close(server.getClientFd());
+		}
 	} catch (const Server::ServerException &e) {
 		std::cerr << e.what() << std::endl;
 		return 1;
 	}
-    return 0;
 }
