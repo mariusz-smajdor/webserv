@@ -1,29 +1,43 @@
-NAME	= webserv
-RM		= rm -f
+# **************************************************************************** #
+#                                                                              #
+#                                                         :::      ::::::::    #
+#    Makefile                                           :+:      :+:    :+:    #
+#                                                     +:+ +:+         +:+      #
+#    By: msmajdor <msmajdor@student.42.fr>          +#+  +:+       +#+         #
+#                                                 +#+#+#+#+#+   +#+            #
+#    Created: 2025/02/06 18:06:23 by msmajdor          #+#    #+#              #
+#    Updated: 2025/02/06 18:06:35 by msmajdor         ###   ########.fr        #
+#                                                                              #
+# **************************************************************************** #
 
-CPP		= c++
-CFLAGS	= -Wall -Wextra -Werror -std=c++98
+# Compiler and flags
+CXX			:= c++
+CXXFLAGS	:= -Wall -Wextra -Werror -std=c++98
 
-SRCS	= webserv.cpp Server/Server.cpp
-OBJS	= $(SRCS:.cpp=.o)
+# Project structure
+NAME		:= webserv
+SRCS		:= $(wildcard srcs/*.cpp)
+OBJS		:= $(SRCS:.cpp=.o)
+INCLUDES	:= -I includes
 
+# Default rule
 all: $(NAME)
 
-%.o: %.cpp
-	$(CPP) $(CFLAGS) -c $< -o $@
-
+# Compile the executable
 $(NAME): $(OBJS)
-	$(CPP) $(CFLAGS) -o $(NAME) $(OBJS)
+	$(CXX) $(CXXFLAGS) $(OBJS) -o $(NAME)
 
+# Compile object files
+%.o: %.cpp
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
+
+# Clean rules
 clean:
-	$(RM) $(OBJS)
+	rm -f $(OBJS)
 
 fclean: clean
-	$(RM) $(NAME)
+	rm -f $(NAME)
 
 re: fclean all
 
 .PHONY: all clean fclean re
-
-
-
