@@ -5,71 +5,80 @@
 /*                                                    +:+ +:+         +:+     */
 /*   By: msmajdor <msmajdor@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
-/*   Created: 2025/02/06 18:19:41 by msmajdor          #+#    #+#             */
-/*   Updated: 2025/02/06 20:30:17 by msmajdor         ###   ########.fr       */
+/*   Created: 2025/02/07 18:27:25 by msmajdor          #+#    #+#             */
+/*   Updated: 2025/02/09 12:31:15 by msmajdor         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "Config.hpp"
 
-// Constructor and destructor
-Config::Config(const std::string& configFile) : configPath(configFile) {
-	parseConfigFile();
+Config::Config(const std::string& configFile)
+{
+	std::ifstream file(configFile.c_str());
+
+	if (!file.is_open())
+	{
+		throw ConfigException("Error: Failed to open config file.");
+	}
+	_parseConfig(file);
 }
 
 Config::~Config() {}
 
-// Member functions
-bool Config::isValid() const {
-	return !servers.empty();
-}
-
-void Config::parseConfigFile() {
-	std::ifstream file(configPath);
-	if (!file.is_open()) {
-		std::cerr << "Error: could not open file: " << configPath << std::endl;
-		return;
-	}
-
-	ServerConfig currentServer;
+void Config::_parseConfig(std::ifstream& file)
+{
 	std::string line;
-	bool inServerBlock = false;
-	while (std::getline(file, line)) {
-		char* key = strdup(line.c_str());
-		char* value = NULL;
-		char* token = strtok(key, " \t");
-
-		if (token) {
-			value = strtok(NULL, " \t");
-
-			if (strcmp(token), "server") {
-				inServerBlock = true;
-				currentServer = ServerConfig();
-			} else if (strcmp(token, "host") == 0 && inServerBlock) {
-				currentServer.host = strdup(value);
-			} else if (strcmp(token, "port") == 0 && inServerBlock) {
-				currentServer.port = atoi(value);
-				if (currentServer.port < MIN_PORT || currentServer.port > MAX_PORT) {
-					std::cerr << "Error: invalid port number: " << currentServer.port << std::endl;
-					continue;
-				}
-			} else if (strcmp(token, "}") == 0) {
-				if (inServerBlock && currentServer.host) {
-					server.push_back(currentServer);
-				}
-				inServerBlock = false;
-			}
+	while (std::getline(file, line))
+	{
+		if (line == "server {")
+		{
+			_parseServer(file, line);
 		}
-		free(key);
 	}
-
-	if (servers.empty()) {
-		std::cerr << "Error: No valid server configurations found in file: " << configPath << std::endl;
-	}
+	file.close();
 }
 
-// Getters and setters
+void Config::_parseServer(std::ifstream& file, std::string& line)
+{
+	ServerConfig server;
 
-const std::vector<ServerConfig>& Config::getServers() const {
-	return servers;
+	while (std::getline(file, line))
+	{
+		if (line == "}")
+		{
+			break;
+		}
+
+		size_t i = 0;
+		while (i < line.length() && std::isspace(line[i]))
+		{
+			i++;
+		}
+
+		line = line.substr(i);
+		if (line.find("host ") != std::string::npos)
+		{
+			server.host = line.substr(5);
+		}
+		else if (line.find("port ") != std::string::npos)
+		{
+			server.port = std::atoi(line.substr(5).c_str());
+		}
+	}
+	_servers.push_back(server);
+}
+
+const std::vector<ServerConfig>& Config::getServers() const
+{
+	return _servers;
+}
+
+Config::ConfigException::ConfigException(const std::string& message)
+	: _message(message) {}
+
+Config::ConfigException::~ConfigException() throw() {}
+
+const char* Config::ConfigException::what() const throw()
+{
+	return _message.c_str();
 }

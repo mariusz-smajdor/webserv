@@ -5,43 +5,52 @@
 /*                                                    +:+ +:+         +:+     */
 /*   By: msmajdor <msmajdor@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
-/*   Created: 2025/02/06 18:06:43 by msmajdor          #+#    #+#             */
-/*   Updated: 2025/02/06 20:26:30 by msmajdor         ###   ########.fr       */
+/*   Created: 2025/02/07 18:25:43 by msmajdor          #+#    #+#             */
+/*   Updated: 2025/02/09 12:16:39 by msmajdor         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #pragma once
 
 #include <iostream>
-#include <fstream>
 #include <string>
+#include <fstream>
+#include <cstdlib>
+#include <vector>
+#include <exception>
 
-#define MIN_PORT 1
-#define MAX_PORT 65535
-#define DEFAULT_CONFIG_FILE "config/default.conf"
-
-struct ServerConfig {
-	char* host;
-	int	port;
+struct ServerConfig
+{
+	std::string host;
+	int port;
 };
 
-class Config {
+class Config
+{
 
 private:
-	const std::string configPath;
-	std::vector<ServerConfig> servers;
+	std::vector<ServerConfig> _servers;
 
-	void parseConfigFile();
-
+	void _parseConfig(std::ifstream& file);
+	void _parseServer(std::ifstream& file, std::string& line);
 public:
-	// Constructor and destructor
-	Config(const std::string& configFile);
+	Config(const std::string& configPath);
 	~Config();
 
-	// Member functions
-	bool isValid() const;
-
-	// Getters and setters
 	const std::vector<ServerConfig>& getServers() const;
+
+	class ConfigException : public std::exception
+	{
+	
+	private:
+		std::string _message;
+
+	public:
+		explicit ConfigException(const std::string& message);
+		virtual ~ConfigException() throw();
+
+		virtual const char* what() const throw();
+
+	};
 
 };
