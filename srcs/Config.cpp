@@ -6,7 +6,7 @@
 /*   By: msmajdor <msmajdor@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/02/07 18:27:25 by msmajdor          #+#    #+#             */
-/*   Updated: 2025/02/09 12:31:15 by msmajdor         ###   ########.fr       */
+/*   Updated: 2025/02/09 17:17:01 by msmajdor         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -18,12 +18,18 @@ Config::Config(const std::string& configFile)
 
 	if (!file.is_open())
 	{
-		throw ConfigException("Error: Failed to open config file.");
+		throw ConfigException("Failed to open config file.");
 	}
 	_parseConfig(file);
 }
 
-Config::~Config() {}
+Config::~Config()
+{
+	if (!_serversConfig.empty())
+	{
+		_serversConfig.clear();
+	}
+}
 
 void Config::_parseConfig(std::ifstream& file)
 {
@@ -65,20 +71,17 @@ void Config::_parseServer(std::ifstream& file, std::string& line)
 			server.port = std::atoi(line.substr(5).c_str());
 		}
 	}
-	_servers.push_back(server);
+	_serversConfig.push_back(server);
 }
 
-const std::vector<ServerConfig>& Config::getServers() const
+const std::vector<ServerConfig>& Config::getServersConfig() const
 {
-	return _servers;
+	return _serversConfig;
 }
+
+// Config Exception
 
 Config::ConfigException::ConfigException(const std::string& message)
-	: _message(message) {}
+	: Exception("Error: Config: " + message) {}
 
 Config::ConfigException::~ConfigException() throw() {}
-
-const char* Config::ConfigException::what() const throw()
-{
-	return _message.c_str();
-}
