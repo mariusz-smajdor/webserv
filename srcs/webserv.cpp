@@ -6,11 +6,11 @@
 /*   By: msmajdor <msmajdor@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/02/07 17:41:32 by msmajdor          #+#    #+#             */
-/*   Updated: 2025/02/09 12:31:28 by msmajdor         ###   ########.fr       */
+/*   Updated: 2025/02/09 17:20:48 by msmajdor         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
-#include "Config.hpp"
+#include "Server.hpp"
 
 int main(int argc, char** av)
 {
@@ -18,13 +18,13 @@ int main(int argc, char** av)
 	{
 		Config config(argc > 1 ? av[1] : "config/default.conf");
 
-		const std::vector<ServerConfig>& servers = config.getServers();
-		for (size_t i = 0; i < servers.size(); i++)
+		const std::vector<ServerConfig>& serversConfig = config.getServersConfig();
+		for (size_t i = 0; i < serversConfig.size(); i++)
 		{
-			std::cout << "Server " << i << " host: " << servers[i].host << " port: " << servers[i].port << std::endl;
+			Server server(serversConfig[i]);
 		}
 	}
-	catch (const Config::ConfigException& e)
+	catch (const Exception& e)
 	{
 		std::cerr << e.what() << std::endl;
 		return 1;

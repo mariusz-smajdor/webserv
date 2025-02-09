@@ -1,48 +1,55 @@
+/* ************************************************************************** */
+/*                                                                            */
+/*                                                        :::      ::::::::   */
+/*   Server.hpp                                         :+:      :+:    :+:   */
+/*                                                    +:+ +:+         +:+     */
+/*   By: msmajdor <msmajdor@student.42.fr>          +#+  +:+       +#+        */
+/*                                                +#+#+#+#+#+   +#+           */
+/*   Created: 2025/02/09 12:39:50 by msmajdor          #+#    #+#             */
+/*   Updated: 2025/02/09 21:46:49 by msmajdor         ###   ########.fr       */
+/*                                                                            */
+/* ************************************************************************** */
+
 #pragma once
 
-#include <iostream>
-#include <cstdlib>
+#include "Config.hpp"
+#include <sstream>
 #include <cstring>
-#include <cerrno>
 #include <unistd.h>
-#include <fstream>
+#include <fcntl.h>
+#include <sys/epoll.h>
 #include <sys/socket.h>
-#include <netinet/in.h>
+#include <arpa/inet.h>
 
-#define PORT 8080
-#define BUFFER_SIZE 1024
-#define MAX_PENDING_CONNECTIONS 512
-#define SERVER_MESSAGE "HTTP/1.1 200 OK\nContent-Type: text/html\nContent-Length: 2241\n\n<!DOCTYPE html>\n<html lang=\"en\">\n\t<head>\n\t\t<meta charset=\"UTF-8\" />\n\t\t<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n\t\t<title>Document</title>\n\t</head>\n\t<body>\n\t\tsuper html\n\t\t<button>click</button>\n\t</body>\n</html>"
+// Later we will get the value from config file
+#define MAX_CONNECTIONS 10
 
-class Server {
-	private:
-		sockaddr_in serverAddr;
-		sockaddr_in clientAddr;
-		socklen_t clientAddrLen;
-		int serverFd;
-		int clientFd;
-		char buffer[BUFFER_SIZE];
-		int bytesRead;
+class Server
+{
 
-		std::string method;
-		std::string requestPath;
-		std::string httpVersion;
-		std::string message;
+private:
+	const struct ServerConfig _config;
+	int _serverfd;
+	int _clientfd;
+	int _epollfd;
+	struct sockaddr_in _serveraddr;
+	struct epoll_event _event;
+
+	int _setNonBlocking(int fd);
+	void _handleEpollEvents();
+	void _acceptNewClient();
+	void _handleExistingClient(int clientfd);
+
+public:
+	Server(const ServerConfig& serverConfig);
+	~Server();
+
+	class ServerException : public Exception
+	{
 
 	public:
-		Server();
-		~Server();
+		explicit ServerException(const std::string& message);
+		virtual ~ServerException() throw();
 
-		void bindSocket();
-		void listenSocket();
-		void acceptConnection();
-		void readSocket();
-		void writeSocket();
-
-		int getClientFd();
-
-		class ServerException : public std::runtime_error {
-			public:
-				explicit ServerException(const std::string& message);
-		};
+	};
 };

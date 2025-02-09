@@ -1,91 +1,173 @@
+/* ************************************************************************** */
+/*                                                                            */
+/*                                                        :::      ::::::::   */
+/*   Server.cpp                                         :+:      :+:    :+:   */
+/*                                                    +:+ +:+         +:+     */
+/*   By: msmajdor <msmajdor@student.42.fr>          +#+  +:+       +#+        */
+/*                                                +#+#+#+#+#+   +#+           */
+/*   Created: 2025/02/09 12:55:49 by msmajdor          #+#    #+#             */
+/*   Updated: 2025/02/09 21:47:36 by msmajdor         ###   ########.fr       */
+/*                                                                            */
+/* ************************************************************************** */
+
 #include "Server.hpp"
 
-Server::Server() {
-	serverFd = socket(AF_INET, SOCK_STREAM, 0);
-	
-	if (serverFd == -1) {
-    	throw Server::ServerException("Socket creation failed. errno: " + std::string(std::strerror(errno)));
+Server::Server(const struct ServerConfig& config)
+	: _config(config), _serverfd(-1), _clientfd(-1), _epollfd(-1)
+{
+	if ((_serverfd = socket(AF_INET, SOCK_STREAM, 0)) == -1)
+	{
+		throw ServerException("Failed to create server socket.");
+	}
+	if (_setNonBlocking(_serverfd) == -1)
+	{
+		throw ServerException("Failed to set server socket to non-blocking mode.");
+	}
+
+    memset(&_serveraddr, 0, sizeof(_serveraddr));
+    _serveraddr.sin_family = AF_INET;
+    _serveraddr.sin_addr.s_addr = INADDR_ANY;
+    _serveraddr.sin_port = htons(_config.port);
+	if (bind(_serverfd, (struct sockaddr*)&_serveraddr, sizeof(_serveraddr)) == -1)
+	{
+		std::stringstream ss;
+		ss << _config.port;
+		throw ServerException("Failed to bind socket on port " + ss.str() + ".");
+	}
+
+	if (listen(_serverfd, MAX_CONNECTIONS) == -1)
+	{
+		throw ServerException("Failed to listen on socket.");
+	}
+
+	if ((_epollfd = epoll_create1(0)) == -1)
+	{
+		throw ServerException("Failed to create epoll instance.");
+	}
+
+	_event.events = EPOLLIN;
+	_event.data.fd = _serverfd;
+	if (epoll_ctl(_epollfd, EPOLL_CTL_ADD, _serverfd, &_event) == -1)
+	{
+		throw ServerException("Failed to add server socket to epoll instance.");
+	}
+
+	_handleEpollEvents();
+}
+
+Server::~Server()
+{
+	if (_serverfd != -1)
+	{
+		close(_serverfd);
+	}
+	if (_clientfd != -1)
+	{
+		close(_clientfd);
+	}
+	if (_epollfd != -1)
+	{
+		close(_epollfd);
 	}
 }
 
-Server::~Server() {
-    if (serverFd != -1) {
-        close(serverFd);
-    }
-}
+// Private methods
 
-void Server::bindSocket() {
-	serverAddr.sin_family = AF_INET;
-	serverAddr.sin_port = htons(PORT);
-	serverAddr.sin_addr.s_addr = htonl(INADDR_ANY);
-
-    if (bind(serverFd, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) < 0) {
-        throw Server::ServerException("Failed to bind to port. errno: " + std::string(std::strerror(errno)));
-    }
-}
-
-void Server::listenSocket() {
-	if (listen(serverFd, MAX_PENDING_CONNECTIONS) < 0) {
-		throw Server::ServerException("Failed to listen on socket. errno: " + std::string(std::strerror(errno)));
+int Server::_setNonBlocking(int fd)
+{
+	int flags = fcntl(fd, F_GETFL, 0);
+	if (flags == -1)
+	{
+		return -1;
 	}
-}
-
-void Server::acceptConnection() {
-	clientAddrLen = sizeof(clientAddr);
-	clientFd = accept(serverFd, (sockaddr*)&clientAddr, &clientAddrLen);
-
-	if (clientFd < 0) {
-		throw Server::ServerException("Failed to grab connection. errno: " + std::string(std::strerror(errno)));
+	if (fcntl(fd, F_SETFL, flags | O_NONBLOCK) == -1)
+	{
+		return -1;
 	}
+	return 0;
 }
 
-void Server::readSocket() {
-	bytesRead = read(clientFd, buffer, BUFFER_SIZE - 1);
-	//  "HTTP/1.1 200 OK\nContent-Type: text/html\nContent-Length: 2241\n\n<htmlcontent	/>"
-	buffer[bytesRead] = '\0';
-	// find first space in buffer
-	int methodEndIndex = std::string(buffer).find(' ');
-	method = std::string(buffer).substr(0, methodEndIndex);
+void Server::_handleEpollEvents()
+{
+	struct epoll_event events[MAX_CONNECTIONS];
 
-	int requestPathEndIndex = std::string(buffer).find(' ', methodEndIndex + 1);
-	requestPath  = std::string(buffer).substr(methodEndIndex + 1, requestPathEndIndex - methodEndIndex - 1);
-
-	int httpVersionEndIndex = std::string(buffer).find('\n', requestPathEndIndex + 1);
-	httpVersion = std::string(buffer).substr(requestPathEndIndex + 1, httpVersionEndIndex - requestPathEndIndex - 1);
-
-	message = "";
-////////////////////////////hardcoded 200 for now
-	if (!method.compare("GET")) {
-		//save the file content to message var
-		//open file
-		std::ifstream file(requestPath.substr(1).c_str());
-		if (file.is_open()) {
-			std::string line;
-			while (std::getline(file, line)) {
-				message += line + "\n";
-			}
-			file.close();
-		} else {
-			message = "404 Not Found"; // just for now, late will change and save in statusCode variable or sth
+	while (true)
+	{
+		int nfds = epoll_wait(_epollfd, events, MAX_CONNECTIONS, -1);
+		if (nfds == -1)
+		{
+			throw ServerException("Failed to wait for events.");
 		}
-		std::cout << message << std::endl;
-	// std::cout << "protocol: " << httpVersion << "\n" << message << requestPath << std::endl;
+
+		for (int i = 0; i < nfds; i++)
+		{
+			if (events[i].data.fd == _serverfd)
+			{
+				_acceptNewClient();
+			}
+			else
+			{
+				_handleExistingClient(events[i].data.fd);
+			}
+		}
 	}
-	//                       harcoded                       hardcoded    hardcoded hardcoded
-	std::cout << buffer << std::endl;
-	message = httpVersion + " 200 OK\n" + "Content-Type: text/html\n" + "Content-Length: 9241\n\n" + message;
 }
 
-void Server::writeSocket() {
-	write(clientFd, message.c_str(), strlen(message.c_str()));
+void Server::_acceptNewClient()
+{
+	if ((_clientfd = accept(_serverfd, NULL, NULL)) == -1)
+	{
+		throw ServerException("Failed to accept connection.");
+	}
+	
+	if (_setNonBlocking(_clientfd) == -1)
+	{
+		std::cerr << "Failed to set client socket to non-blocking mode.\n";
+		// const char* error_message = "HTTP/1.1 500 Internal Server Error\r\nContent-Type: text/plain\r\n\r\nFailed to set socket to non-blocking mode.";
+		// send(client_fd, error_message, strlen(error_message), 0);
+		close(_clientfd);
+		return;
+	}
+
+	_event.events = EPOLLIN | EPOLLET;
+	_event.data.fd = _clientfd;
+	if (epoll_ctl(_epollfd, EPOLL_CTL_ADD, _clientfd, &_event) == -1)
+	{
+		std::cerr << "Failed to add client socket to epoll instance.\n";
+		// const char* error_message = "HTTP/1.1 500 Internal Server Error\r\nContent-Length: 0\r\n\r\n";
+		// send(_clientfd, error_message, strlen(error_message), 0);
+		close(_clientfd);
+	}
 }
 
-// Setters and getters
+void Server::_handleExistingClient(int clientfd)
+{
+	char buffer[1024];
+	int bytes_read = read(clientfd, buffer, sizeof(buffer));
 
-int Server::getClientFd() {
-	return clientFd;
+	if (bytes_read == -1)
+	{
+		std::cerr << "Failed to read data from client.\n";
+		// const char* error_response = "HTTP/1.1 500 Internal Server Error\r\nContent-Length: 0\r\n\r\n";
+		// send(clientfd, error_response, strlen(error_response), 0);
+		close(clientfd);
+	}
+	else if (bytes_read == 0)
+	{
+		std::cout << "Connection closed by client.\n";
+		close(clientfd);
+	}
+	else
+	{
+		std::cout << "Received data:\n" << std::string(buffer, bytes_read) << "\n";
+		const char* response = "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n";
+		send(clientfd, response, strlen(response), 0);
+	}
 }
 
-Server::ServerException::ServerException(const std::string &message)
-    : std::runtime_error(message) {}
+// Server exception
 
+Server::ServerException::ServerException(const std::string& message)
+	: Exception("Error: Server: " + message) {}
+
+Server::ServerException::~ServerException() throw() {}
