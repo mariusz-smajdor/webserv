@@ -6,7 +6,7 @@
 /*   By: msmajdor <msmajdor@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/02/09 12:39:50 by msmajdor          #+#    #+#             */
-/*   Updated: 2025/02/09 21:46:49 by msmajdor         ###   ########.fr       */
+/*   Updated: 2025/02/11 19:02:30 by msmajdor         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -15,6 +15,7 @@
 #include "Config.hpp"
 #include <sstream>
 #include <cstring>
+#include <algorithm>
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/epoll.h>
@@ -22,27 +23,27 @@
 #include <arpa/inet.h>
 
 // Later we will get the value from config file
-#define MAX_CONNECTIONS 10
+#define MAX_EVENTS 10
+#define BUFFER_SIZE 1024
 
 class Server
 {
 
 private:
-	const struct ServerConfig _config;
-	int _serverfd;
-	int _clientfd;
-	int _epollfd;
-	struct sockaddr_in _serveraddr;
-	struct epoll_event _event;
+    Config _config;
+    std::vector<int> _serverfds;
+    int _epollfd;
 
 	int _setNonBlocking(int fd);
-	void _handleEpollEvents();
-	void _acceptNewClient();
-	void _handleExistingClient(int clientfd);
+	int _createServerSocket(int port);
+	void _handleClientConnection(int serverfd);
+	void _handleClientData(int clientfd);
 
 public:
-	Server(const ServerConfig& serverConfig);
+	Server(const std::string& configPath);
 	~Server();
+
+	void run();
 
 	class ServerException : public Exception
 	{
@@ -52,4 +53,5 @@ public:
 		virtual ~ServerException() throw();
 
 	};
+
 };

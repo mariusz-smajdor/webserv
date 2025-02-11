@@ -6,68 +6,42 @@
 /*   By: msmajdor <msmajdor@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/02/09 12:55:49 by msmajdor          #+#    #+#             */
-/*   Updated: 2025/02/09 21:47:36 by msmajdor         ###   ########.fr       */
+/*   Updated: 2025/02/11 19:13:16 by msmajdor         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "Server.hpp"
 
-Server::Server(const struct ServerConfig& config)
-	: _config(config), _serverfd(-1), _clientfd(-1), _epollfd(-1)
+Server::Server(const std::string& configPath)
+	: _config(configPath)
 {
-	if ((_serverfd = socket(AF_INET, SOCK_STREAM, 0)) == -1)
-	{
-		throw ServerException("Failed to create server socket.");
-	}
-	if (_setNonBlocking(_serverfd) == -1)
-	{
-		throw ServerException("Failed to set server socket to non-blocking mode.");
-	}
-
-    memset(&_serveraddr, 0, sizeof(_serveraddr));
-    _serveraddr.sin_family = AF_INET;
-    _serveraddr.sin_addr.s_addr = INADDR_ANY;
-    _serveraddr.sin_port = htons(_config.port);
-	if (bind(_serverfd, (struct sockaddr*)&_serveraddr, sizeof(_serveraddr)) == -1)
-	{
-		std::stringstream ss;
-		ss << _config.port;
-		throw ServerException("Failed to bind socket on port " + ss.str() + ".");
-	}
-
-	if (listen(_serverfd, MAX_CONNECTIONS) == -1)
-	{
-		throw ServerException("Failed to listen on socket.");
-	}
-
-	if ((_epollfd = epoll_create1(0)) == -1)
+	_epollfd = epoll_create1(0);
+	if (_epollfd == -1)
 	{
 		throw ServerException("Failed to create epoll instance.");
 	}
-
-	_event.events = EPOLLIN;
-	_event.data.fd = _serverfd;
-	if (epoll_ctl(_epollfd, EPOLL_CTL_ADD, _serverfd, &_event) == -1)
+	
+	struct epoll_event event;
+	const std::vector<ServerConfig>& servers = _config.getServerConfigs();
+	for (size_t i = 0; i < servers.size(); ++i)
 	{
-		throw ServerException("Failed to add server socket to epoll instance.");
+		int serverfd = _createServerSocket(servers[i].port);
+		_serverfds.push_back(serverfd);
+		event.events = EPOLLIN;
+		event.data.fd = serverfd;
+		if (epoll_ctl(_epollfd, EPOLL_CTL_ADD, serverfd, &event) == -1)
+		{
+			throw ServerException("Failed to add server socket to epoll instance.");
+		}
 	}
-
-	_handleEpollEvents();
 }
 
 Server::~Server()
 {
-	if (_serverfd != -1)
+	close(_epollfd);
+	for (size_t i = 0; i < _serverfds.size(); ++i)
 	{
-		close(_serverfd);
-	}
-	if (_clientfd != -1)
-	{
-		close(_clientfd);
-	}
-	if (_epollfd != -1)
-	{
-		close(_epollfd);
+		close(_serverfds[i]);
 	}
 }
 
@@ -87,81 +61,117 @@ int Server::_setNonBlocking(int fd)
 	return 0;
 }
 
-void Server::_handleEpollEvents()
+int Server::_createServerSocket(int port)
 {
-	struct epoll_event events[MAX_CONNECTIONS];
-
-	while (true)
+	int serverfd = socket(AF_INET, SOCK_STREAM, 0);
+	if (serverfd == -1)
 	{
-		int nfds = epoll_wait(_epollfd, events, MAX_CONNECTIONS, -1);
-		if (nfds == -1)
-		{
-			throw ServerException("Failed to wait for events.");
-		}
-
-		for (int i = 0; i < nfds; i++)
-		{
-			if (events[i].data.fd == _serverfd)
-			{
-				_acceptNewClient();
-			}
-			else
-			{
-				_handleExistingClient(events[i].data.fd);
-			}
-		}
+		throw ServerException("Failed to create server socket.");
 	}
+
+	int optval = 1;
+	if (setsockopt(serverfd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)) == -1)
+	{
+		throw ServerException("Failed to set socket options.");
+	}
+
+	struct sockaddr_in serveraddr;
+	memset(&serveraddr, 0, sizeof(serveraddr));
+	serveraddr.sin_family = AF_INET;
+	serveraddr.sin_addr.s_addr = INADDR_ANY;
+	serveraddr.sin_port = htons(port);
+	if (bind(serverfd, (sockaddr*)&serveraddr, sizeof(serveraddr)) == -1)
+	{
+		std::stringstream ss;
+		ss << port;
+		throw ServerException("Failed to bind socket on port " + ss.str() + ".");
+	}
+
+	if (listen(serverfd, MAX_EVENTS) == -1)
+	{
+		throw ServerException("Failed to listen on socket.");
+	}
+
+	_setNonBlocking(serverfd);
+	return serverfd;
 }
 
-void Server::_acceptNewClient()
+void Server::_handleClientConnection(int serverfd)
 {
-	if ((_clientfd = accept(_serverfd, NULL, NULL)) == -1)
+	struct sockaddr_in clientaddr;
+	socklen_t clientaddrlen = sizeof(clientaddr);
+	int clientfd = accept(serverfd, (struct sockaddr*)&clientaddr, &clientaddrlen);
+	if (clientfd == -1)
 	{
-		throw ServerException("Failed to accept connection.");
-	}
-	
-	if (_setNonBlocking(_clientfd) == -1)
-	{
-		std::cerr << "Failed to set client socket to non-blocking mode.\n";
-		// const char* error_message = "HTTP/1.1 500 Internal Server Error\r\nContent-Type: text/plain\r\n\r\nFailed to set socket to non-blocking mode.";
-		// send(client_fd, error_message, strlen(error_message), 0);
-		close(_clientfd);
+		std::cerr << "Failed to accept connection from client.\n";
 		return;
 	}
-
-	_event.events = EPOLLIN | EPOLLET;
-	_event.data.fd = _clientfd;
-	if (epoll_ctl(_epollfd, EPOLL_CTL_ADD, _clientfd, &_event) == -1)
+	_setNonBlocking(clientfd);
+	
+	struct epoll_event event;
+	event.events = EPOLLIN | EPOLLET;
+	event.data.fd = clientfd;
+	if (epoll_ctl(_epollfd, EPOLL_CTL_ADD, clientfd, &event) == -1)
 	{
 		std::cerr << "Failed to add client socket to epoll instance.\n";
 		// const char* error_message = "HTTP/1.1 500 Internal Server Error\r\nContent-Length: 0\r\n\r\n";
 		// send(_clientfd, error_message, strlen(error_message), 0);
-		close(_clientfd);
+		close(clientfd);
 	}
 }
 
-void Server::_handleExistingClient(int clientfd)
+void Server::_handleClientData(int clientfd)
 {
-	char buffer[1024];
-	int bytes_read = read(clientfd, buffer, sizeof(buffer));
-
-	if (bytes_read == -1)
+	char buffer[BUFFER_SIZE];
+	int bytesRead = recv(clientfd, buffer, BUFFER_SIZE - 1, 0);
+	if (bytesRead == -1)
 	{
-		std::cerr << "Failed to read data from client.\n";
-		// const char* error_response = "HTTP/1.1 500 Internal Server Error\r\nContent-Length: 0\r\n\r\n";
-		// send(clientfd, error_response, strlen(error_response), 0);
+		std::cerr << "Failed to read from client socket.\n";
+		// const char* error_message = "HTTP/1.1 500 Internal Server Error\r\nContent-Length: 0\r\n\r\n";
+		// send(_clientfd, error_message, strlen(error_message), 0);
 		close(clientfd);
 	}
-	else if (bytes_read == 0)
+	else if (bytesRead == 0)
 	{
 		std::cout << "Connection closed by client.\n";
 		close(clientfd);
 	}
 	else
 	{
-		std::cout << "Received data:\n" << std::string(buffer, bytes_read) << "\n";
+		buffer[bytesRead] = '\0';
+		std::cout << "Received " << bytesRead << " bytes from client.\n";
+		std::cout << buffer << std::endl;
 		const char* response = "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n";
 		send(clientfd, response, strlen(response), 0);
+	}
+}
+
+// Public methods
+
+void Server::run()
+{
+	struct epoll_event events[MAX_EVENTS];
+
+	while (true)
+	{
+		int nfds = epoll_wait(_epollfd, events, MAX_EVENTS, -1);
+		if (nfds == -1)
+		{
+			throw ServerException("Failed to wait for events.");
+		}
+
+		for (int i = 0; i < nfds; ++i)
+		{
+			int fd = events[i].data.fd;
+			if (std::find(_serverfds.begin(), _serverfds.end(), fd) != _serverfds.end())
+			{
+				_handleClientConnection(fd);
+			}
+			else
+			{
+				_handleClientData(fd);
+			}
+		}
 	}
 }
 
