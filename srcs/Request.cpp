@@ -6,7 +6,7 @@
 /*   By: msmajdor <msmajdor@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/02/12 15:40:35 by msmajdor          #+#    #+#             */
-/*   Updated: 2025/02/12 17:26:03 by msmajdor         ###   ########.fr       */
+/*   Updated: 2025/02/12 18:20:14 by msmajdor         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -37,10 +37,42 @@ int Request::_readHeader()
 			&& _headerBuffer[_totalBytesRead - 1] == '\n')
 		{
 			_headerBuffer[_totalBytesRead] = '\0';
-			break;
+			return bytesRead;
 		}
 	}
-	return 1;
+	return -2;
+}
+
+void Request::_parseHeader()
+{
+	int i = 0;
+
+	_parseRequestLine(&i);
+}
+
+void Request::_parseRequestLine(int* i)
+{
+	_method = _extractToken(i);
+	_uri = _extractToken(i);
+	_httpVersion = _extractToken(i);
+
+	while (std::isspace(_headerBuffer[*i]))
+	{
+		++(*i);
+	}
+}
+
+char* Request::_extractToken(int* i)
+{
+    char* token = &_headerBuffer[*i];
+
+    while (!std::isspace(_headerBuffer[*i]))
+	{
+        ++(*i);
+	}
+    _headerBuffer[*i] = '\0';
+    ++(*i);
+    return token;
 }
 
 // Public methods
@@ -53,6 +85,9 @@ int Request::readRequest()
 	{
 		return status;
 	}
-	std::cout << _headerBuffer << std::endl;
+	_parseHeader();
+	std::cout << "Method: " << _method << std::endl;
+	std::cout << "URI: " << _uri << std::endl;
+	std::cout << "HTTP Version: " << _httpVersion << std::endl;
 	return status;
 }
