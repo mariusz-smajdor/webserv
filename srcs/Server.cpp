@@ -6,7 +6,7 @@
 /*   By: msmajdor <msmajdor@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/02/09 12:55:49 by msmajdor          #+#    #+#             */
-/*   Updated: 2025/02/11 19:13:16 by msmajdor         ###   ########.fr       */
+/*   Updated: 2025/02/12 17:36:01 by msmajdor         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -91,6 +91,7 @@ int Server::_createServerSocket(int port)
 	{
 		throw ServerException("Failed to listen on socket.");
 	}
+	std::cout << "Server listening on port " << port << ".\n";
 
 	_setNonBlocking(serverfd);
 	return serverfd;
@@ -122,25 +123,23 @@ void Server::_handleClientConnection(int serverfd)
 
 void Server::_handleClientData(int clientfd)
 {
-	char buffer[BUFFER_SIZE];
-	int bytesRead = recv(clientfd, buffer, BUFFER_SIZE - 1, 0);
-	if (bytesRead == -1)
+	Request request(clientfd);
+	int status = request.readRequest();
+
+	if (status == -1)
 	{
 		std::cerr << "Failed to read from client socket.\n";
 		// const char* error_message = "HTTP/1.1 500 Internal Server Error\r\nContent-Length: 0\r\n\r\n";
 		// send(_clientfd, error_message, strlen(error_message), 0);
 		close(clientfd);
 	}
-	else if (bytesRead == 0)
+	else if (status == 0)
 	{
 		std::cout << "Connection closed by client.\n";
 		close(clientfd);
 	}
 	else
 	{
-		buffer[bytesRead] = '\0';
-		std::cout << "Received " << bytesRead << " bytes from client.\n";
-		std::cout << buffer << std::endl;
 		const char* response = "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n";
 		send(clientfd, response, strlen(response), 0);
 	}
