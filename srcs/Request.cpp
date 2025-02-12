@@ -6,7 +6,7 @@
 /*   By: msmajdor <msmajdor@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/02/12 15:40:35 by msmajdor          #+#    #+#             */
-/*   Updated: 2025/02/12 18:20:14 by msmajdor         ###   ########.fr       */
+/*   Updated: 2025/02/12 19:30:03 by msmajdor         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -43,18 +43,11 @@ int Request::_readHeader()
 	return -2;
 }
 
-void Request::_parseHeader()
-{
-	int i = 0;
-
-	_parseRequestLine(&i);
-}
-
 void Request::_parseRequestLine(int* i)
 {
 	_method = _extractToken(i);
 	_uri = _extractToken(i);
-	_httpVersion = _extractToken(i);
+	_httpVersion = _extractToken(i, '\r', 2);
 
 	while (std::isspace(_headerBuffer[*i]))
 	{
@@ -62,16 +55,26 @@ void Request::_parseRequestLine(int* i)
 	}
 }
 
-char* Request::_extractToken(int* i)
+void Request::_parseHeaders(int* i)
+{
+	while (_headerBuffer[*i] != '\r')
+	{
+		char* key = _extractToken(i, ':', 2);
+		char* value = _extractToken(i, '\r', 2);
+		_headers.push_back(std::make_pair(key, value));
+	}
+}
+
+char* Request::_extractToken(int* i, char delimiter, int step)
 {
     char* token = &_headerBuffer[*i];
 
-    while (!std::isspace(_headerBuffer[*i]))
+    while (_headerBuffer[*i] != delimiter)
 	{
         ++(*i);
 	}
     _headerBuffer[*i] = '\0';
-    ++(*i);
+    *i += step;
     return token;
 }
 
@@ -85,9 +88,17 @@ int Request::readRequest()
 	{
 		return status;
 	}
-	_parseHeader();
+
+	int i = 0;
+	_parseRequestLine(&i);
+	_parseHeaders(&i);
 	std::cout << "Method: " << _method << std::endl;
 	std::cout << "URI: " << _uri << std::endl;
 	std::cout << "HTTP Version: " << _httpVersion << std::endl;
+	for (size_t i = 0; i < _headers.size(); ++i)
+	{
+		std::cout << _headers[i].first << ": " << _headers[i].second << std::endl;
+	}
+	std::cout << std::endl;
 	return status;
 }

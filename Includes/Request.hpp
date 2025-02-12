@@ -6,13 +6,15 @@
 /*   By: msmajdor <msmajdor@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/02/12 14:47:11 by msmajdor          #+#    #+#             */
-/*   Updated: 2025/02/12 18:17:58 by msmajdor         ###   ########.fr       */
+/*   Updated: 2025/02/12 19:30:10 by msmajdor         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #pragma once
 
 #include <iostream>
+#include <cstring>
+#include <vector>
 #include <unistd.h>
 #include <sys/socket.h>
 
@@ -29,11 +31,12 @@ private:
 	char* _method;
 	char* _uri;
 	char* _httpVersion;
+	std::vector<std::pair<char*, char*> > _headers;
 
 	int _readHeader();
-	void _parseHeader();
 	void _parseRequestLine(int* i);
-	char* _extractToken(int* i);
+	void _parseHeaders(int* i);
+	char* _extractToken(int* i, char delim = ' ', int step = 1);
 
 public:
 	Request(int clientfd);
