@@ -6,15 +6,16 @@
 /*   By: msmajdor <msmajdor@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/02/12 14:47:11 by msmajdor          #+#    #+#             */
-/*   Updated: 2025/02/12 19:30:10 by msmajdor         ###   ########.fr       */
+/*   Updated: 2025/02/14 20:27:59 by msmajdor         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #pragma once
 
 #include <iostream>
-#include <cstring>
 #include <vector>
+#include <cstdlib>
+#include <cstring>
 #include <unistd.h>
 #include <sys/socket.h>
 
@@ -37,6 +38,7 @@ private:
 	void _parseRequestLine(int* i);
 	void _parseHeaders(int* i);
 	char* _extractToken(int* i, char delim = ' ', int step = 1);
+	int _readBody(int contentLength);
 
 public:
 	Request(int clientfd);

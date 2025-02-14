@@ -6,7 +6,7 @@
 /*   By: msmajdor <msmajdor@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/02/12 15:40:35 by msmajdor          #+#    #+#             */
-/*   Updated: 2025/02/12 19:30:03 by msmajdor         ###   ########.fr       */
+/*   Updated: 2025/02/14 20:36:18 by msmajdor         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -24,7 +24,8 @@ int Request::_readHeader()
 
 	while (_totalBytesRead < BUFFER_SIZE)
 	{
-		ssize_t bytesRead = recv(_clientfd, _headerBuffer + _totalBytesRead, 1, 0);
+		ssize_t bytesRead = recv(_clientfd, _headerBuffer + _totalBytesRead, 1, MSG_DONTWAIT);
+
 		if (bytesRead <= 0)
 		{
 			return bytesRead;
@@ -78,11 +79,22 @@ char* Request::_extractToken(int* i, char delimiter, int step)
     return token;
 }
 
+int Request::_readBody(int contentLength)
+{
+	ssize_t bytesRead = recv(_clientfd, _bodyBuffer, contentLength, MSG_DONTWAIT);
+
+	if (bytesRead <= 0)
+	{
+		return bytesRead;
+	}
+	_bodyBuffer[bytesRead] = '\0';
+	return bytesRead;
+}
+
 // Public methods
 
 int Request::readRequest()
 {
-	(void)_bodyBuffer;
 	int status = _readHeader();
 	if (status <= 0)
 	{
@@ -92,6 +104,25 @@ int Request::readRequest()
 	int i = 0;
 	_parseRequestLine(&i);
 	_parseHeaders(&i);
+
+	int contentLength = 0;
+	for (size_t i = 0; i < _headers.size(); i++)
+	{
+		if (std::strcmp(_headers[i].first, "content-length") == 0)
+		{
+			contentLength = std::atoi(_headers[i].second);
+			if (contentLength >= BUFFER_SIZE)
+			{
+				return -2;
+			}
+			status = _readBody(contentLength);
+			if (status <= 0)
+			{
+				return status;
+			}
+		}
+	}
+
 	std::cout << "Method: " << _method << std::endl;
 	std::cout << "URI: " << _uri << std::endl;
 	std::cout << "HTTP Version: " << _httpVersion << std::endl;
@@ -99,6 +130,7 @@ int Request::readRequest()
 	{
 		std::cout << _headers[i].first << ": " << _headers[i].second << std::endl;
 	}
+	std::cout << "Body:" << _bodyBuffer << "\n";
 	std::cout << std::endl;
 	return status;
 }
